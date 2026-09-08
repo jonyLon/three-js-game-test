@@ -1,5 +1,7 @@
 import * as THREE from 'three';
-const names={forest:'ХВОЙНИЙ ЛІС',jungle:'ДЖУНГЛІ'};
+const names={jungle:'ДЖУНГЛІ',forest:'ХВОЙНИЙ ЛІС',ez:'ДУБОВИЙ ГАЙ',terrain:'ГІРСЬКА ДОЛИНА',simplex:'ХВИЛЯСТІ ЛУКИ',fastnoise:'СКЕЛЯСТІ ПАГОРБИ',seedthree:'ГІЛЛЯСТИЙ САД'};
+const route=Object.keys(names);
+function destination(biome,north){return route[(route.indexOf(biome)+(north?1:route.length-1))%route.length];}
 export class TrailTravel {
  constructor(scene,camera,walker,{height,pathX,getBiome,isBusy,changeBiome}){
   Object.assign(this,{camera,walker,height,pathX,getBiome,isBusy,changeBiome});this.busy=false;this.cooldown=0;
@@ -15,18 +17,18 @@ export class TrailTravel {
    scene.add(group);this.signs.push({group,canvas,texture,z});
   }
  }
- updateSigns(biome){for(const sign of this.signs){const x=this.pathX(sign.z)-2.5;sign.group.position.set(x,this.height(x,sign.z),sign.z);const ctx=sign.canvas.getContext('2d');ctx.fillStyle='#443c29';ctx.fillRect(0,0,512,160);ctx.strokeStyle='#b9bb87';ctx.lineWidth=2;ctx.strokeRect(8,8,496,144);ctx.fillStyle='#ece5bd';ctx.textAlign='center';ctx.font='bold 33px sans-serif';ctx.fillText(names[biome==='jungle'?'forest':'jungle'],256,67);ctx.font='23px sans-serif';ctx.fillText('ДАЛІ СТЕЖКОЮ  ↑',256,116);sign.texture.needsUpdate=true;}}
+ updateSigns(biome){for(const sign of this.signs){const x=this.pathX(sign.z)-2.5;sign.group.position.set(x,this.height(x,sign.z),sign.z);const ctx=sign.canvas.getContext('2d');ctx.fillStyle='#443c29';ctx.fillRect(0,0,512,160);ctx.strokeStyle='#b9bb87';ctx.lineWidth=2;ctx.strokeRect(8,8,496,144);ctx.fillStyle='#ece5bd';ctx.textAlign='center';ctx.font='bold 33px sans-serif';ctx.fillText(names[destination(biome,sign.z<0)],256,67);ctx.font='23px sans-serif';ctx.fillText('ДАЛІ СТЕЖКОЮ  ↑',256,116);sign.texture.needsUpdate=true;}}
  update(dt){
   this.cooldown=Math.max(0,this.cooldown-dt);
   if(!this.walker.active||!this.walker.locked||this.busy||this.isBusy()){this.hint.hidden=true;return;}
   const {x,z}=this.camera.position,onPath=Math.abs(x-this.pathX(z))<2.4;
   const near=onPath&&(z<-32||z>21.5);
   this.hint.hidden=!near;
-  if(near){const text='Стежка веде у '+(this.getBiome()==='jungle'?'хвойний ліс':'джунглі')+' · продовжуй іти';if(this.hint.textContent!==text)this.hint.textContent=text;}
+  if(near){const text='Стежка веде у '+names[destination(this.getBiome(),z<0)].toLowerCase()+' · продовжуй іти';if(this.hint.textContent!==text)this.hint.textContent=text;}
   if(onPath&&this.cooldown===0&&(z<-40.5||z>24.5))void this.cross(z<0);
  }
  async cross(north){
-  this.busy=true;this.walker.traveling=true;this.hint.hidden=true;const next=this.getBiome()==='jungle'?'forest':'jungle';
+  this.busy=true;this.walker.traveling=true;this.hint.hidden=true;const next=destination(this.getBiome(),north);
   this.overlay.querySelector('span').textContent=names[next];this.overlay.classList.add('visible');
   try{
    await new Promise(r=>setTimeout(r,280));

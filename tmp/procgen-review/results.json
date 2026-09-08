@@ -1,0 +1,17 @@
+{
+  "result": {
+    "three": "180",
+    "tree": {
+      "generationMs": 13.900000095367432,
+      "branches": 3206,
+      "leaves": 3600,
+      "generateLODs": "undefined",
+      "createGeometry": "undefined"
+    },
+    "terrainVertices": 1024,
+    "grass": true,
+    "noiseFinite": true,
+    "calls": 4
+  },
+  "consoleErrors": []
+}

@@ -1,0 +1,17 @@
+<!doctype html><html><head><meta charset="UTF-8"><link rel="icon" href="data:,"><title>Isolated procedural library compatibility check</title></head><body><script type="module">
+import * as THREE from './node_modules/three/build/three.module.js';
+import { Tree } from './node_modules/@dgreenheck/ez-tree/build/ez-tree.es.js';
+import Terrain, { TerrainNS, createSeededRandom, createGrass } from './node_modules/three.terrain.js/dist/three.terrain.js';
+import { createNoise2D } from './node_modules/simplex-noise/dist/esm/simplex-noise.js';
+try {
+const renderer=new THREE.WebGLRenderer({antialias:false});renderer.setSize(640,480);document.body.appendChild(renderer.domElement);
+const scene=new THREE.Scene();scene.background=new THREE.Color('#b9d2e0');scene.add(new THREE.HemisphereLight(0xffffff,0x444422,2));const light=new THREE.DirectionalLight(0xffffff,3);light.position.set(20,30,20);scene.add(light);
+const tree=new Tree();const start=performance.now();tree.loadPreset('Oak Small');const generationMs=performance.now()-start;scene.add(tree);
+const terrain=Terrain({heightmap:TerrainNS.PerlinDiamond,random:createSeededRandom(123),xSegments:31,ySegments:31,xSize:60,ySize:60,minHeight:-1,maxHeight:0,material:new THREE.MeshStandardMaterial({color:'#718648'})});scene.add(terrain);
+const grass=createGrass({bladeCount:12,height:.6,width:.35});scene.add(grass);
+const noise=createNoise2D(createSeededRandom(10));const values=Array.from({length:1000},(_,i)=>noise(i*.05,i*.03));
+const camera=new THREE.PerspectiveCamera(50,640/480,.1,200);camera.position.set(18,12,20);camera.lookAt(0,6,0);await renderer.compileAsync(scene,camera);renderer.render(scene,camera);
+window.review={three:THREE.REVISION,tree:{generationMs,branches:tree.branchesMesh.geometry.index.count/3,leaves:tree.leavesMesh.geometry.index.count/3,generateLODs:typeof tree.generateLODs,createGeometry:typeof tree.createGeometry},terrainVertices:terrain.children[0].geometry.attributes.position.count,grass:grass.isObject3D,noiseFinite:values.every(Number.isFinite),calls:renderer.info.render.calls};
+}catch(e){window.reviewError=e.stack;}
+</script></body></html>
+

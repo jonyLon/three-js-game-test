@@ -39,11 +39,15 @@ const sky=createSky(scene,camera,sun);
 const bounce = new THREE.DirectionalLight(0x9bc8bc, .4); bounce.position.set(8, 7, 20); scene.add(bounce);
 let random, seed = 2841;
 let biome = 'jungle';
+const experimentalNames={ez:'Дубовий гай · EZ-Tree',terrain:'Гірська долина · THREE.Terrain',simplex:'Хвилясті луки · simplex-noise',fastnoise:'Скелясті пагорби · FastNoiseLite',seedthree:'Гіллястий сад · SeedThree'};
+let experiments;
+async function loadBiome(id){if(experimentalNames[id]){experiments??=await import('./experimental-biomes.js');await experiments.load(id);}}
+
 function rng(s) { return () => { s |= 0; s = s + 0x6D2B79F5 | 0; let t = Math.imul(s ^ s >>> 15, 1 | s); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
 const range = (a, b) => a + random() * (b - a);
 function hash(x, z) { const n = Math.sin(x * 127.1 + z * 311.7 + seed * .13) * 43758.5453; return n - Math.floor(n); }
 function noise(x, z) { const ix = Math.floor(x), iz = Math.floor(z); let fx = x - ix, fz = z - iz; fx *= fx * (3 - 2 * fx); fz *= fz * (3 - 2 * fz); return THREE.MathUtils.lerp(THREE.MathUtils.lerp(hash(ix, iz), hash(ix + 1, iz), fx), THREE.MathUtils.lerp(hash(ix, iz + 1), hash(ix + 1, iz + 1), fx), fz); }
-function terrain(x, z) { return (noise(x * .065, z * .065) - .5) * 3.2 + (noise(x * .22, z * .22) - .5) * .55 + Math.sin(z * .13) * .32; }
+function terrain(x, z) { if(experimentalNames[biome]&&experiments)return experiments.sample(x,z); return (noise(x * .065, z * .065) - .5) * 3.2 + (noise(x * .22, z * .22) - .5) * .55 + Math.sin(z * .13) * .32; }
 function pathX(z) { return 2 + Math.sin(z * .13) * 3.6 + Math.sin(z * .045) * 3; }
 function pathDistance(x, z) { return Math.abs(x - pathX(z)); }
 const dummy = new THREE.Object3D(), color = new THREE.Color();
@@ -120,6 +124,8 @@ function fernGeometry() {
   const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.computeVertexNormals(); return g;
 }
 function growForest() {
+  if(experimentalNames[biome])experiments.prepare(biome,seed);
+  const discardedMaterials=new Set();forest.traverse(o=>{if(o.userData.experimentalMaterial)discardedMaterials.add(o.material);});discardedMaterials.forEach(m=>m.dispose());
   scene.remove(forest);
   forest.traverse(o => { if (o.geometry) o.geometry.dispose(); if (o.isInstancedMesh) o.dispose(); });
   forest = new THREE.Group(); scene.add(forest); random = rng(seed); walker.colliders = [];gathering.beginWorld(biome,seed);
@@ -130,13 +136,13 @@ function growForest() {
   ground.setAttribute('color', new THREE.Float32BufferAttribute(gc,3)); ground.computeVertexNormals(); mesh(ground, groundMat, false);
   const trunks = [], branches = [], needles = [], needleColors = [];
   const trees = [];
-  for (let i=0; i<155; i++) {
+  for (let i=0; i<(experimentalNames[biome]?48:155); i++) {
     const x=range(-43,43), z=range(-51,28);
     if (pathDistance(x,z)<3.1 || (x-11)**2+(z-22)**2<16 || trees.some(t => (t.x-x)**2+(t.z-z)**2<10)) continue;
     trees.push({x,z,h:range(14,25),r:range(.3,.62)});
   }
   trees.push({x:-8,z:10,h:25,r:.8},{x:12,z:5,h:24,r:.68},{x:-14,z:-7,h:23,r:.65});
-  if(biome==='jungle'){growJungle({trees,range,terrain,pathDistance,branch,merged,instance,mesh,colliders:walker.colliders});}else{
+  if(experimentalNames[biome]&&experiments.populate(biome,{trees,terrain,range,branch,merged,mesh,colliders:walker.colliders,barkMat})){}else if(biome==='jungle'){growJungle({trees,range,terrain,pathDistance,branch,merged,instance,mesh,colliders:walker.colliders});}else{
   for (const t of trees) {
     const {x,z,h,r}=t, y=terrain(x,z), lean=range(-.5,.5); walker.colliders.push({x,z,radius:r*1.6});
     const tg=new THREE.CylinderGeometry(r*.18,r,h,10,10); const p=tg.attributes.position;
@@ -167,7 +173,7 @@ function growForest() {
   merged(trunks,barkMat);merged(branches,barkMat);instance(tuftGeometry(),needleMat,needles,needleColors);
   }
   const grass=[], grassColors=[];
-  for(let i=0;i<(biome==='jungle'?85000:155000);i++){
+  for(let i=0;i<(experimentalNames[biome]?45000:biome==='jungle'?85000:155000);i++){
     const x=range(-39,39), z=range(-43,33), pd=pathDistance(x,z);
     if(pd<range(.8,2.2) || random()> .45+noise(x*.24,z*.24)*.65)continue;
     const s=range(.18,.52)*(pd<2.5?.55:1);
@@ -241,7 +247,7 @@ const trail=new TrailTravel(scene,camera,walker,{
  async changeBiome(next,entryZ){
   regenerating=true;
   try{
-   const heldKeys=[...walker.keys];biome=next;growForest();walker.resetPosition(entryZ);heldKeys.forEach(key=>walker.keys.add(key));
+   const heldKeys=[...walker.keys];await loadBiome(next);biome=next;growForest();walker.resetPosition(entryZ);heldKeys.forEach(key=>walker.keys.add(key));
    setMood(currentMood);updateBiomeUI();await renderer.compileAsync(scene,camera);
   }finally{regenerating=false;}
  }
@@ -252,11 +258,12 @@ function updateBiomeUI(){
  document.querySelector('.intro p').innerHTML=biome==='jungle'?'Під зеленим пологом.<br/>Назустріч невідомому.':'Трохи світла. Трохи тиші.<br/>Світ, що народжується з математики.';
  document.querySelector('.coordinates').innerHTML=biome==='jungle'?'03° 07′ S &nbsp; / &nbsp; 60° 01′ W <span>УЯВНА АМАЗОНІЯ</span>':'48° 16′ N &nbsp; / &nbsp; 24° 31′ E <span>УЯВНІ КАРПАТИ</span>';
  document.querySelector('#scene').setAttribute('aria-label',biome==='jungle'?'Інтерактивні процедурні джунглі':'Інтерактивний процедурний ліс');
+ if(experimentalNames[biome]){document.querySelector('h1').textContent=experimentalNames[biome].split(' · ')[0];document.querySelector('.intro p').textContent='Тестовий біом · '+experimentalNames[biome].split(' · ')[1];document.querySelector('.coordinates').textContent='ЕКСПЕРИМЕНТАЛЬНА ЛОКАЦІЯ';}
 }
-document.querySelector('#biome').addEventListener('change',e=>{
+document.querySelector('#biome').addEventListener('change',async e=>{
  if(regenerating){e.target.value=biome;return;}
- biome=e.target.value;regenerating=true;walker.pause();document.querySelector('#loading').classList.remove('done');
- setTimeout(()=>{growForest();setMood(currentMood);updateBiomeUI();regenerating=false;setTimeout(()=>document.querySelector('#loading').classList.add('done'),100);},60);
+ const next=e.target.value;regenerating=true;walker.pause();document.querySelector('#loading').classList.remove('done');
+ try{await loadBiome(next);biome=next;growForest();setMood(currentMood);updateBiomeUI();await renderer.compileAsync(scene,camera);}catch(error){console.error(error);document.querySelector('#biome').value=biome;}finally{regenerating=false;document.querySelector('#loading').classList.add('done');}
 });
 document.querySelector('#regenerate').addEventListener('click',()=>{if(regenerating)return;regenerating=true;const b=document.querySelector('#regenerate');b.disabled=true;document.querySelector('#loading').classList.remove('done');setTimeout(()=>{seed=(seed+7919)%100000;growForest();trail.updateSigns(biome);b.disabled=false;regenerating=false;setTimeout(()=>document.querySelector('#loading').classList.add('done'),100);},60);});
 function toggleUI(){document.body.classList.toggle('ui-hidden');}document.querySelector('#hide-ui').onclick=toggleUI;document.querySelector('#restore-ui').onclick=toggleUI;window.addEventListener('keydown',e=>{if(e.code==='KeyH'&&!e.repeat)toggleUI();});
